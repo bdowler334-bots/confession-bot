@@ -708,7 +708,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await sendLog(interaction.guild, `↩️ Anonymous reply to Confession #${id}`, `Reply by <@${interaction.user.id}> (\`${interaction.user.id}\`)`, [
             { name: 'Reply', value: text.slice(0, 1024) }
           ]);
-          return interaction.reply({ ephemeral: true, content: 'Your anonymous reply was posted.});
+          return interaction.reply({ ephemeral: true, content: 'Your anonymous reply was posted.' });
         }
 
         if (sub === 'report') {
