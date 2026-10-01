@@ -1,0 +1,19 @@
+{
+  "name": "pineapple-confessions",
+  "version": "2.4.0",
+  "private": true,
+  "description": "Premium-style anonymous confession bot for Discord with private owner/admin audit logs.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0",
+    "dotenv": "^16.4.7"
+  }
+}
