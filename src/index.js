@@ -204,6 +204,45 @@ async function sendLog(guild, title, description, fields = []) {
   });
 }
 
+async function submitAnonymousReply(interaction, gd, record, confessionId, text, confirmation) {
+  const channel = await interaction.guild.channels.fetch(record.publicChannelId).catch(() => null);
+  if (!channel?.isTextBased()) {
+    return interaction.reply({ ephemeral: true, content: 'The confession channel could not be found.' });
+  }
+
+  const displayName = interaction.member?.displayName || interaction.member?.nick ||
+    interaction.user.globalName || interaction.user.username || interaction.user.tag;
+  const author = [
+    `Display name: ${displayName}`,
+    `Username: ${interaction.user.tag || interaction.user.username}`,
+    `Member: <@${interaction.user.id}>`,
+    `User ID: \`${interaction.user.id}\``,
+  ].join('\n');
+  const fields = [
+    { name: 'Reply author • staff only', value: author.slice(0, 1024) },
+    { name: 'Reply', value: text.slice(0, 1024) },
+  ];
+  if (text.length > 1024) fields.push({ name: 'Reply (continued)', value: text.slice(1024, 2048) });
+
+  const logged = await sendLog(interaction.guild, `↩️ Anonymous reply submitted for Confession #${confessionId}`,
+    `Reply by <@${interaction.user.id}>`, fields);
+  if (!logged) {
+    return interaction.reply({ ephemeral: true, content: 'Your reply could not be submitted right now. Please try again later.' });
+  }
+
+  const msg = await channel.send({ embeds: [replyEmbed(gd, confessionId, text)] });
+  record.replies.push({
+    id: record.replies.length + 1,
+    authorId: interaction.user.id,
+    authorTag: interaction.user.tag,
+    text,
+    createdAt: new Date().toISOString(),
+    publicMessageId: msg.id,
+  });
+  await saveDb();
+  return interaction.reply({ ephemeral: true, content: confirmation });
+}
+
 function makeErrorId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -702,23 +741,7 @@ client.on(Events.InteractionCreate, async interaction => {
           const bad = blockedWord(gd, text);
           if (bad) return interaction.reply({ ephemeral: true, content: 'Your reply contains a blocked word or phrase.' });
 
-          const channel = await interaction.guild.channels.fetch(record.publicChannelId).catch(() => null);
-          if (!channel?.isTextBased()) return interaction.reply({ ephemeral: true, content: 'The confession channel could not be found.' });
-          const msg = await channel.send({ embeds: [replyEmbed(gd, id, text)] });
-          const reply = {
-            id: record.replies.length + 1,
-            authorId: interaction.user.id,
-            authorTag: interaction.user.tag,
-            text,
-            createdAt: new Date().toISOString(),
-            publicMessageId: msg.id,
-          };
-          record.replies.push(reply);
-          await saveDb();
-          await sendLog(interaction.guild, `↩️ Anonymous reply to Confession #${id}`, `Reply by <@${interaction.user.id}> (\`${interaction.user.id}\`)`, [
-            { name: 'Reply', value: text.slice(0, 1024) }
-          ]);
-          return interaction.reply({ ephemeral: true, content: 'Your anonymous reply was posted.' });
+          return submitAnonymousReply(interaction, gd, record, id, text, 'Your anonymous reply was posted.');
         }
 
         if (sub === 'report') {
@@ -1004,22 +1027,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const bad = blockedWord(gd, text);
         if (bad) return interaction.reply({ ephemeral: true, content: 'Your reply contains a blocked word or phrase.' });
 
-        const channel = await interaction.guild.channels.fetch(record.publicChannelId).catch(() => null);
-        if (!channel?.isTextBased()) return interaction.reply({ ephemeral: true, content: 'The confession channel could not be found.' });
-        const msg = await channel.send({ embeds: [replyEmbed(gd, id, text)] });
-        record.replies.push({
-          id: record.replies.length + 1,
-          authorId: interaction.user.id,
-          authorTag: interaction.user.tag,
-          text,
-          createdAt: new Date().toISOString(),
-          publicMessageId: msg.id,
-        });
-        await saveDb();
-        await sendLog(interaction.guild, `↩️ Anonymous reply to Confession #${id}`, `Reply by <@${interaction.user.id}> (\`${interaction.user.id}\`)`, [
-          { name: 'Reply', value: text.slice(0, 1024) }
-        ]);
-        return interaction.reply({ ephemeral: true, content: 'Anonymous reply posted.' });
+        return submitAnonymousReply(interaction, gd, record, id, text, 'Anonymous reply posted.');
       }
 
       if (interaction.customId.startsWith('report-modal:')) {
