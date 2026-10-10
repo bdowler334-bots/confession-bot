@@ -142,7 +142,7 @@ function confessionEmbed(guildData, record) {
     .setColor(guildData.settings.color)
     .setTitle(`${guildData.settings.title} #${record.id}`)
     .setDescription(record.text || '*No text provided.*')
-    .setImage('attachment://' + BRAND_FILENAME)
+    .setThumbnail('attachment://' + BRAND_FILENAME)
     .setFooter({ text: guildData.settings.footer })
     .setTimestamp(new Date(record.createdAt));
 }
@@ -157,7 +157,13 @@ function replyEmbed(guildData, confessionId, text) {
 }
 
 function publicButtons(guildData, confessionId) {
-  const buttons = [];
+  const buttons = [
+    new ButtonBuilder()
+      .setCustomId('confess:new')
+      .setLabel('Submit your own confession')
+      .setEmoji('🍍')
+      .setStyle(ButtonStyle.Success)
+  ];
   if (guildData.settings.allowReplies) {
     buttons.push(
       new ButtonBuilder()
@@ -279,6 +285,36 @@ function cooldownRemaining(guildData, userId) {
   const last = Number(guildData.cooldowns[userId] || 0);
   const waitMs = guildData.settings.cooldownSeconds * 1000;
   return Math.max(0, last + waitMs - Date.now());
+}
+
+async function showConfessionModal(interaction, gd) {
+  if (!gd.settings.confessionChannelId || !gd.settings.logChannelId || !gd.settings.verifiedRoleId) {
+    return interaction.reply({ ephemeral: true, content: 'Confessions are not configured yet. An Administrator must run `/confessions setup`.' });
+  }
+  if (isBlocked(gd, interaction.user.id)) {
+    return interaction.reply({ ephemeral: true, content: 'You are not permitted to submit confessions in this server.' });
+  }
+  if (!await isVerified(interaction, gd.settings)) {
+    return interaction.reply({ ephemeral: true, content: 'Verified role required.' });
+  }
+  const remaining = cooldownRemaining(gd, interaction.user.id);
+  if (remaining > 0) {
+    return interaction.reply({ ephemeral: true, content: `Please wait ${Math.ceil(remaining / 1000)} seconds before submitting another confession.` });
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId('confess-modal')
+    .setTitle('🍍 Confession • Anonymous mode enabled');
+  const text = new TextInputBuilder()
+    .setCustomId('text')
+    .setLabel(gd.settings.memberMessages.formLabel)
+    .setPlaceholder(gd.settings.memberMessages.formPlaceholder)
+    .setStyle(TextInputStyle.Paragraph)
+    .setMinLength(1)
+    .setMaxLength(2000)
+    .setRequired(true);
+  modal.addComponents(new ActionRowBuilder().addComponents(text));
+  return interaction.showModal(modal);
 }
 
 async function postConfession(guild, gd, record) {
@@ -591,33 +627,7 @@ client.on(Events.InteractionCreate, async interaction => {
       const gd = getGuildData(interaction.guildId);
 
       if (interaction.commandName === 'confess') {
-        if (!gd.settings.confessionChannelId || !gd.settings.logChannelId || !gd.settings.verifiedRoleId) {
-          return interaction.reply({ ephemeral: true, content: 'Confessions are not configured yet. An Administrator must run `/confessions setup`.' });
-        }
-        if (isBlocked(gd, interaction.user.id)) {
-          return interaction.reply({ ephemeral: true, content: 'You are not permitted to submit confessions in this server.' });
-        }
-        if (!await isVerified(interaction, gd.settings)) return interaction.reply({ ephemeral: true, content: 'Verified role required.' });
-        const remaining = cooldownRemaining(gd, interaction.user.id);
-        if (remaining > 0) {
-          return interaction.reply({ ephemeral: true, content: `Please wait ${Math.ceil(remaining / 1000)} seconds before submitting another confession.` });
-        }
-
-        const modal = new ModalBuilder()
-          .setCustomId('confess-modal')
-          .setTitle('Confession • Anonymous mode enabled');
-
-        const text = new TextInputBuilder()
-          .setCustomId('text')
-          .setLabel(gd.settings.memberMessages.formLabel)
-          .setPlaceholder(gd.settings.memberMessages.formPlaceholder)
-          .setStyle(TextInputStyle.Paragraph)
-          .setMinLength(1)
-          .setMaxLength(2000)
-          .setRequired(true);
-
-        modal.addComponents(new ActionRowBuilder().addComponents(text));
-        return interaction.showModal(modal);
+        return showConfessionModal(interaction, gd);
       }
 
       if (interaction.commandName === 'confess-file') {
@@ -1054,8 +1064,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (interaction.isButton()) {
       const [action, rawId] = interaction.customId.split(':');
-      const id = Number(rawId);
       const gd = getGuildData(interaction.guildId);
+      if (action === 'confess' && rawId === 'new') {
+        return showConfessionModal(interaction, gd);
+      }
+      const id = Number(rawId);
       const record = gd.confessions[String(id)];
       if (!record) return interaction.reply({ ephemeral: true, content: 'That confession no longer exists.' });
 
