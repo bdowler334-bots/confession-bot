@@ -183,7 +183,7 @@ function publicButtons(guildData, confessionId) {
   return buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [];
 }
 
-async function sendLog(guild, title, description, fields = []) {
+async function sendLog(guild, title, description, fields = [], reportFailureToErrorLog = true) {
   const gd = getGuildData(guild.id);
   const channelId = gd.settings.logChannelId;
   if (!channelId) return false;
@@ -199,15 +199,25 @@ async function sendLog(guild, title, description, fields = []) {
 
   return channel.send({ embeds: [embed], allowedMentions: { parse: [] } }).then(() => true).catch(err => {
     console.error(`Failed to write confession log in guild ${guild.id}:`, err);
-    void sendErrorLog(guild, err, 'Author log delivery');
+    if (reportFailureToErrorLog) void sendErrorLog(guild, err, 'Author log delivery');
     return false;
   });
+}
+
+function isBotLogDestination(settings, channel) {
+  return Boolean(channel && (channel.id === settings.errorLogChannelId ||
+    /^bot[-_ ]?logs?$/i.test(channel.name || '')));
 }
 
 async function submitAnonymousReply(interaction, gd, record, confessionId, text, confirmation) {
   const channel = await interaction.guild.channels.fetch(record.publicChannelId).catch(() => null);
   if (!channel?.isTextBased()) {
     return interaction.reply({ ephemeral: true, content: 'The confession channel could not be found.' });
+  }
+  const privateLog = gd.settings.logChannelId
+    ? await interaction.guild.channels.fetch(gd.settings.logChannelId, { force: true }).catch(() => null) : null;
+  if (!privateLog?.isTextBased() || isBotLogDestination(gd.settings, privateLog)) {
+    return interaction.reply({ ephemeral: true, content: 'The private confession log needs to be configured before replies can be posted. Please ask a Server Owner or Admin.' });
   }
 
   const displayName = interaction.member?.displayName || interaction.member?.nick ||
@@ -225,7 +235,7 @@ async function submitAnonymousReply(interaction, gd, record, confessionId, text,
   if (text.length > 1024) fields.push({ name: 'Reply (continued)', value: text.slice(1024, 2048) });
 
   const logged = await sendLog(interaction.guild, `↩️ Anonymous reply submitted for Confession #${confessionId}`,
-    `Reply by <@${interaction.user.id}>`, fields);
+    `Reply by <@${interaction.user.id}>`, fields, false);
   if (!logged) {
     return interaction.reply({ ephemeral: true, content: 'Your reply could not be submitted right now. Please try again later.' });
   }
@@ -582,6 +592,8 @@ const commands = [
       .addChannelOption(o => o.setName('review_channel').setDescription('Optional private approval queue').addChannelTypes(ChannelType.GuildText)))
     .addSubcommand(s => s.setName('error-log').setDescription('Set an Owner/Admin-only channel for bot error reports.')
       .addChannelOption(o => o.setName('channel').setDescription('Private error-log channel').addChannelTypes(ChannelType.GuildText).setRequired(true)))
+    .addSubcommand(s => s.setName('log-channel').setDescription('Set the private confession log for submissions and reply identities.')
+      .addChannelOption(o => o.setName('channel').setDescription('Dedicated Owner/Admin-only confession log channel').addChannelTypes(ChannelType.GuildText).setRequired(true)))
     .addSubcommand(s => s.setName('settings').setDescription('Show current confession settings.'))
     .addSubcommand(s => s.setName('form').setDescription('Customize the confession form prompt (privacy title stays fixed).')
       .addStringOption(o => o.setName('label').setDescription('Prompt above the text box, up to 45 characters').setMaxLength(45).setRequired(true))
@@ -767,6 +779,9 @@ client.on(Events.InteractionCreate, async interaction => {
           if (channel.id === s.confessionChannelId) {
             return interaction.reply({ ephemeral: true, content: 'The public confession channel cannot be used for private error logs.' });
           }
+          if (channel.id === s.logChannelId) {
+            return interaction.reply({ ephemeral: true, content: 'Choose a different channel from the private confession log.' });
+          }
           const secured = await lockPrivateChannel(channel, interaction.guild, 'the error-log channel');
           if (!secured.ok) return interaction.reply({ ephemeral: true, content: `Setup stopped: ${secured.note}` });
           try {
@@ -779,6 +794,23 @@ client.on(Events.InteractionCreate, async interaction => {
           return interaction.reply({ ephemeral: true, content: `Bot errors will be reported in <#${channel.id}> (Server Owner/Admin only).` });
         }
 
+        if (sub === 'log-channel') {
+          const channel = interaction.options.getChannel('channel', true);
+          if (channel.id === s.confessionChannelId || isBotLogDestination(s, channel)) {
+            return interaction.reply({ ephemeral: true, content: 'Choose a dedicated confession log channel, separate from the public channel and bot error log.' });
+          }
+          const secured = await lockPrivateChannel(channel, interaction.guild, 'the confession log channel');
+          if (!secured.ok) return interaction.reply({ ephemeral: true, content: `Setup stopped: ${secured.note}` });
+          try {
+            await channel.send({ content: '✅ Pineapple Confessions and anonymous reply logs are active in this private channel.', allowedMentions: { parse: [] } });
+          } catch (err) {
+            return interaction.reply({ ephemeral: true, content: `Could not send to that channel: ${err.message}` });
+          }
+          s.logChannelId = channel.id;
+          await saveDb();
+          return interaction.reply({ ephemeral: true, content: `Confession submissions and anonymous reply identities will be logged in <#${channel.id}> (Server Owner/Admin only).` });
+        }
+
         if (sub === 'setup') {
           const confessionChannel = interaction.options.getChannel('confession_channel', true);
           const logChannel = interaction.options.getChannel('log_channel', true);
@@ -787,8 +819,9 @@ client.on(Events.InteractionCreate, async interaction => {
           if (verifiedRole.id === interaction.guild.id || verifiedRole.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ ephemeral: true, content: 'Choose a normal Verified role without Administrator permission.' });
           }
-          if (confessionChannel.id === logChannel.id || confessionChannel.id === reviewChannel?.id) {
-            return interaction.reply({ ephemeral: true, content: 'Public and private channels must be separate.' });
+          if (confessionChannel.id === logChannel.id || confessionChannel.id === reviewChannel?.id ||
+              isBotLogDestination(s, logChannel)) {
+            return interaction.reply({ ephemeral: true, content: 'Choose a dedicated confession log channel, separate from the public channel and bot error log.' });
           }
 
           const logLock = await lockPrivateChannel(logChannel, interaction.guild, 'the confession log channel');
