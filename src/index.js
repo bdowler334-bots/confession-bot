@@ -60,7 +60,6 @@ const defaultSettings = () => ({
   cooldownSeconds: 60,
   allowAttachments: true,
   allowReplies: true,
-  allowReactions: true,
   color: 0xF4C430,
   title: '🍍 Pineapple Confession',
   footer: 'Welcome to Anonymous confessions',
@@ -103,6 +102,7 @@ function getGuildData(guildId) {
   }
   const g = db.guilds[guildId];
   g.settings = { ...defaultSettings(), ...(g.settings || {}) };
+  delete g.settings.allowReactions;
   g.settings.memberMessages = { ...defaultMemberMessages(), ...(g.settings.memberMessages || {}) };
   g.confessions ||= {};
   g.cooldowns ||= {};
@@ -375,12 +375,6 @@ async function postConfession(guild, gd, record) {
   record.publicChannelId = channel.id;
   record.status = 'posted';
   record.postedAt = new Date().toISOString();
-
-  if (gd.settings.allowReactions) {
-    for (const emoji of ['❤️', '😂', '👀']) {
-      await message.react(emoji).catch(() => {});
-    }
-  }
   await saveDb();
   return message;
 }
@@ -608,8 +602,6 @@ const commands = [
       .addBooleanOption(o => o.setName('enabled').setDescription('Allow attachments').setRequired(true)))
     .addSubcommand(s => s.setName('replies').setDescription('Allow or deny anonymous replies.')
       .addBooleanOption(o => o.setName('enabled').setDescription('Allow replies').setRequired(true)))
-    .addSubcommand(s => s.setName('reactions').setDescription('Add default reactions to new confessions.')
-      .addBooleanOption(o => o.setName('enabled').setDescription('Enable reactions').setRequired(true)))
     .addSubcommand(s => s.setName('block').setDescription('Block a member from submitting confessions.')
       .addUserOption(o => o.setName('user').setDescription('Member to block').setRequired(true)))
     .addSubcommand(s => s.setName('unblock').setDescription('Remove a member from the confession block list.')
@@ -845,7 +837,6 @@ client.on(Events.InteractionCreate, async interaction => {
                   { name: 'Cooldown', value: `${s.cooldownSeconds}s`, inline: true },
                   { name: 'Attachments', value: String(s.allowAttachments), inline: true },
                   { name: 'Anonymous replies', value: String(s.allowReplies), inline: true },
-                  { name: 'Default reactions', value: String(s.allowReactions), inline: true },
                   { name: 'Blocked users', value: String(s.blockedUsers.length), inline: true },
                   { name: 'Blocked phrases', value: String(s.blockedWords.length), inline: true },
                   { name: 'Saved confessions', value: String(Object.keys(gd.confessions).length), inline: true },
@@ -905,12 +896,6 @@ client.on(Events.InteractionCreate, async interaction => {
           s.allowReplies = interaction.options.getBoolean('enabled', true);
           await saveDb();
           return interaction.reply({ ephemeral: true, content: `Anonymous replies are now **${s.allowReplies ? 'enabled' : 'disabled'}**.` });
-        }
-
-        if (sub === 'reactions') {
-          s.allowReactions = interaction.options.getBoolean('enabled', true);
-          await saveDb();
-          return interaction.reply({ ephemeral: true, content: `Default confession reactions are now **${s.allowReactions ? 'enabled' : 'disabled'}**.` });
         }
 
         if (sub === 'block' || sub === 'unblock') {
