@@ -212,12 +212,12 @@ function isBotLogDestination(settings, channel) {
 async function submitAnonymousReply(interaction, gd, record, confessionId, text, confirmation) {
   const channel = await interaction.guild.channels.fetch(record.publicChannelId).catch(() => null);
   if (!channel?.isTextBased()) {
-    return interaction.reply({ ephemeral: true, content: 'The confession channel could not be found.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'The confession channel could not be found.' });
   }
   const privateLog = gd.settings.logChannelId
     ? await interaction.guild.channels.fetch(gd.settings.logChannelId, { force: true }).catch(() => null) : null;
   if (!privateLog?.isTextBased() || isBotLogDestination(gd.settings, privateLog)) {
-    return interaction.reply({ ephemeral: true, content: 'The private confession log needs to be configured before replies can be posted. Please ask a Server Owner or Admin.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'The private confession log needs to be configured before replies can be posted. Please ask a Server Owner or Admin.' });
   }
 
   const displayName = interaction.member?.displayName || interaction.member?.nick ||
@@ -237,7 +237,7 @@ async function submitAnonymousReply(interaction, gd, record, confessionId, text,
   const logged = await sendLog(interaction.guild, `↩️ Anonymous reply submitted for Confession #${confessionId}`,
     `Reply by <@${interaction.user.id}>`, fields, false);
   if (!logged) {
-    return interaction.reply({ ephemeral: true, content: 'Your reply could not be submitted right now. Please try again later.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'Your reply could not be submitted right now. Please try again later.' });
   }
 
   const msg = await channel.send({ embeds: [replyEmbed(gd, confessionId, text)] });
@@ -250,7 +250,7 @@ async function submitAnonymousReply(interaction, gd, record, confessionId, text,
     publicMessageId: msg.id,
   });
   await saveDb();
-  return interaction.reply({ ephemeral: true, content: confirmation });
+  return replyInteraction(interaction, { ephemeral: true, content: confirmation });
 }
 
 function makeErrorId() {
@@ -338,17 +338,17 @@ function cooldownRemaining(guildData, userId) {
 
 async function showConfessionModal(interaction, gd) {
   if (!gd.settings.confessionChannelId || !gd.settings.logChannelId || !gd.settings.verifiedRoleId) {
-    return interaction.reply({ ephemeral: true, content: 'Confessions are not configured yet. An Administrator must run `/confessions setup`.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'Confessions are not configured yet. An Administrator must run `/confessions setup`.' });
   }
   if (isBlocked(gd, interaction.user.id)) {
-    return interaction.reply({ ephemeral: true, content: 'You are not permitted to submit confessions in this server.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'You are not permitted to submit confessions in this server.' });
   }
   if (!await isVerified(interaction, gd.settings)) {
-    return interaction.reply({ ephemeral: true, content: 'Verified role required.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'Verified role required.' });
   }
   const remaining = cooldownRemaining(gd, interaction.user.id);
   if (remaining > 0) {
-    return interaction.reply({ ephemeral: true, content: `Please wait ${Math.ceil(remaining / 1000)} seconds before submitting another confession.` });
+    return replyInteraction(interaction, { ephemeral: true, content: `Please wait ${Math.ceil(remaining / 1000)} seconds before submitting another confession.` });
   }
 
   const modal = new ModalBuilder()
@@ -423,18 +423,18 @@ async function submitConfession(interaction, text, attachmentUrl = null) {
   const s = gd.settings;
 
   if (!s.confessionChannelId || !s.logChannelId || !s.verifiedRoleId) {
-    return interaction.reply({
+    return replyInteraction(interaction, {
       ephemeral: true,
       content: 'Confessions are not configured yet. An Administrator must run `/confessions setup` first.',
     });
   }
 
   if (!await isVerified(interaction, s)) {
-    return interaction.reply({ ephemeral: true, content: 'Verified role required to submit confessions.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'Verified role required to submit confessions.' });
   }
 
   if (isBlocked(gd, interaction.user.id)) {
-    return interaction.reply({
+    return replyInteraction(interaction, {
       ephemeral: true,
       content: 'You are not permitted to submit confessions in this server.',
     });
@@ -442,7 +442,7 @@ async function submitConfession(interaction, text, attachmentUrl = null) {
 
   const remaining = cooldownRemaining(gd, interaction.user.id);
   if (remaining > 0) {
-    return interaction.reply({
+    return replyInteraction(interaction, {
       ephemeral: true,
       content: `Please wait ${Math.ceil(remaining / 1000)} seconds before submitting another confession.`,
     });
@@ -450,14 +450,14 @@ async function submitConfession(interaction, text, attachmentUrl = null) {
 
   const bad = blockedWord(gd, text);
   if (bad) {
-    return interaction.reply({
+    return replyInteraction(interaction, {
       ephemeral: true,
       content: 'Your confession contains a word or phrase blocked by this server.',
     });
   }
 
   if (attachmentUrl && !s.allowAttachments) {
-    return interaction.reply({ ephemeral: true, content: 'Attachments are disabled for confessions in this server.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'Attachments are disabled for confessions in this server.' });
   }
 
   const publicChannel = await interaction.guild.channels.fetch(s.confessionChannelId, { force: true }).catch(() => null);
@@ -469,7 +469,7 @@ async function submitConfession(interaction, text, attachmentUrl = null) {
       (s.approvalRequired && !isRestricted(reviewChannel, interaction.guild, null))) {
     void sendErrorLog(interaction.guild, new Error('Confession, author-log, or review-channel permissions could not be verified.'),
       'Submission permission check', makeErrorId(), interaction.user.id);
-    return interaction.reply({ ephemeral: true, content: 'Channel permissions need repair. Ask an Administrator to rerun setup.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'Channel permissions need repair. Ask an Administrator to rerun setup.' });
   }
 
   gd.counter += 1;
@@ -511,13 +511,13 @@ async function submitConfession(interaction, text, attachmentUrl = null) {
   if (!logged) {
     record.status = 'error';
     await saveDb();
-    return interaction.reply({ ephemeral: true, content: 'Could not write the private author log, so nothing was posted.' });
+    return replyInteraction(interaction, { ephemeral: true, content: 'Could not write the private author log, so nothing was posted.' });
   }
 
   try {
     if (s.approvalRequired) {
       await queueForApproval(interaction.guild, gd, record);
-      return interaction.reply({
+      return replyInteraction(interaction, {
         ephemeral: true,
         content: confirmationText(s, 'pending', id),
         allowedMentions: { parse: [] },
@@ -525,7 +525,7 @@ async function submitConfession(interaction, text, attachmentUrl = null) {
     }
 
     await postConfession(interaction.guild, gd, record);
-    return interaction.reply({
+    return replyInteraction(interaction, {
       ephemeral: true,
       content: confirmationText(s, 'posted', id),
       allowedMentions: { parse: [] },
@@ -536,7 +536,7 @@ async function submitConfession(interaction, text, attachmentUrl = null) {
     record.history.push({ action: 'post_error', at: new Date().toISOString(), error: err.message });
     await saveDb();
     void sendErrorLog(interaction.guild, err, `Confession #${id} posting/review`, errorId, interaction.user.id);
-    return interaction.reply({
+    return replyInteraction(interaction, {
       ephemeral: true,
       content: `Confession #${id} was saved but could not be posted (error ID: ${errorId}). Please tell a Server Owner or Admin.`,
     });
@@ -662,6 +662,15 @@ process.on('unhandledRejection', err => {
   void broadcastError(err, 'Unhandled rejection');
 });
 
+function replyInteraction(interaction, options) {
+  if (interaction.deferred) {
+    const { ephemeral, ...editable } = options;
+    return interaction.editReply(editable);
+  }
+  if (interaction.replied) return interaction.followUp(options);
+  return replyInteraction(interaction, options);
+}
+
 client.on(Events.InteractionCreate, async interaction => {
   try {
     if (!interaction.inGuild()) return;
@@ -676,11 +685,13 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.commandName === 'confess-file') {
         const attachment = interaction.options.getAttachment('attachment', true);
         const caption = interaction.options.getString('caption', true);
+        await interaction.deferReply({ ephemeral: true });
         return submitConfession(interaction, caption, attachment.url);
       }
 
       if (interaction.commandName === 'confession') {
-        if (!await isVerified(interaction, gd.settings)) return interaction.reply({ ephemeral: true, content: 'Verified role required.' });
+        await interaction.deferReply({ ephemeral: true });
+        if (!await isVerified(interaction, gd.settings)) return replyInteraction(interaction, { ephemeral: true, content: 'Verified role required.' });
         const sub = interaction.options.getSubcommand();
 
         if (sub === 'mine') {
@@ -689,18 +700,18 @@ client.on(Events.InteractionCreate, async interaction => {
             .sort((a, b) => b.id - a.id)
             .slice(0, 10);
 
-          if (!mine.length) return interaction.reply({ ephemeral: true, content: 'You have no saved confessions in this server.' });
+          if (!mine.length) return replyInteraction(interaction, { ephemeral: true, content: 'You have no saved confessions in this server.' });
           const lines = mine.map(c => `#${c.id} — **${c.status}** — ${formatDiscordTime(c.createdAt)}`);
-          return interaction.reply({ ephemeral: true, content: `Your recent confessions:\n${lines.join('\n')}` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Your recent confessions:\n${lines.join('\n')}` });
         }
 
         const id = interaction.options.getInteger('id', true);
         const record = gd.confessions[String(id)];
-        if (!record) return interaction.reply({ ephemeral: true, content: `Confession #${id} does not exist.` });
+        if (!record) return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} does not exist.` });
 
         if (sub === 'delete') {
           if (record.authorId !== interaction.user.id) {
-            return interaction.reply({ ephemeral: true, content: 'You can only delete your own confession.' });
+            return replyInteraction(interaction, { ephemeral: true, content: 'You can only delete your own confession.' });
           }
           const msg = await fetchPublicMessage(interaction.guild, record);
           if (msg) await msg.delete().catch(() => {});
@@ -708,19 +719,19 @@ client.on(Events.InteractionCreate, async interaction => {
           record.history.push({ action: 'deleted_by_author', at: new Date().toISOString(), by: interaction.user.id });
           await saveDb();
           await sendLog(interaction.guild, `🗑️ Confession #${id} deleted by submitter`, `The original submitter <@${interaction.user.id}> deleted their confession.`);
-          return interaction.reply({ ephemeral: true, content: `Confession #${id} was deleted.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} was deleted.` });
         }
 
         if (sub === 'edit') {
           if (record.authorId !== interaction.user.id) {
-            return interaction.reply({ ephemeral: true, content: 'You can only edit your own confession.' });
+            return replyInteraction(interaction, { ephemeral: true, content: 'You can only edit your own confession.' });
           }
           if (record.status !== 'posted') {
-            return interaction.reply({ ephemeral: true, content: 'Only currently posted confessions can be edited.' });
+            return replyInteraction(interaction, { ephemeral: true, content: 'Only currently posted confessions can be edited.' });
           }
           const newText = interaction.options.getString('text', true);
           const bad = blockedWord(gd, newText);
-          if (bad) return interaction.reply({ ephemeral: true, content: 'The edited confession contains a blocked word or phrase.' });
+          if (bad) return replyInteraction(interaction, { ephemeral: true, content: 'The edited confession contains a blocked word or phrase.' });
 
           record.text = newText;
           record.editedAt = new Date().toISOString();
@@ -735,15 +746,15 @@ client.on(Events.InteractionCreate, async interaction => {
           await sendLog(interaction.guild, `✏️ Confession #${id} edited`, `Submitter: <@${interaction.user.id}>`, [
             { name: 'Updated content', value: newText.slice(0, 1024) }
           ]);
-          return interaction.reply({ ephemeral: true, content: `Confession #${id} was updated.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} was updated.` });
         }
 
         if (sub === 'reply') {
-          if (!gd.settings.allowReplies) return interaction.reply({ ephemeral: true, content: 'Anonymous replies are disabled.' });
-          if (record.status !== 'posted') return interaction.reply({ ephemeral: true, content: 'That confession is not currently posted.' });
+          if (!gd.settings.allowReplies) return replyInteraction(interaction, { ephemeral: true, content: 'Anonymous replies are disabled.' });
+          if (record.status !== 'posted') return replyInteraction(interaction, { ephemeral: true, content: 'That confession is not currently posted.' });
           const text = interaction.options.getString('text', true);
           const bad = blockedWord(gd, text);
-          if (bad) return interaction.reply({ ephemeral: true, content: 'Your reply contains a blocked word or phrase.' });
+          if (bad) return replyInteraction(interaction, { ephemeral: true, content: 'Your reply contains a blocked word or phrase.' });
 
           return submitAnonymousReply(interaction, gd, record, id, text, 'Your anonymous reply was posted.');
         }
@@ -762,13 +773,14 @@ client.on(Events.InteractionCreate, async interaction => {
             { name: 'Reason', value: reason.slice(0, 1024) },
             { name: 'Original submitter', value: `<@${record.authorId}> (\`${record.authorId}\`)` },
           ]);
-          return interaction.reply({ ephemeral: true, content: `Report sent privately for Confession #${id}.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Report sent privately for Confession #${id}.` });
         }
       }
 
       if (interaction.commandName === 'confessions') {
+        await interaction.deferReply({ ephemeral: true });
         if (!isAdmin(interaction)) {
-          return interaction.reply({ ephemeral: true, content: 'Server Owner or Administrator permission is required.' });
+          return replyInteraction(interaction, { ephemeral: true, content: 'Server Owner or Administrator permission is required.' });
         }
 
         const sub = interaction.options.getSubcommand();
@@ -777,38 +789,38 @@ client.on(Events.InteractionCreate, async interaction => {
         if (sub === 'error-log') {
           const channel = interaction.options.getChannel('channel', true);
           if (channel.id === s.confessionChannelId) {
-            return interaction.reply({ ephemeral: true, content: 'The public confession channel cannot be used for private error logs.' });
+            return replyInteraction(interaction, { ephemeral: true, content: 'The public confession channel cannot be used for private error logs.' });
           }
           if (channel.id === s.logChannelId) {
-            return interaction.reply({ ephemeral: true, content: 'Choose a different channel from the private confession log.' });
+            return replyInteraction(interaction, { ephemeral: true, content: 'Choose a different channel from the private confession log.' });
           }
           const secured = await lockPrivateChannel(channel, interaction.guild, 'the error-log channel');
-          if (!secured.ok) return interaction.reply({ ephemeral: true, content: `Setup stopped: ${secured.note}` });
+          if (!secured.ok) return replyInteraction(interaction, { ephemeral: true, content: `Setup stopped: ${secured.note}` });
           try {
             await channel.send({ content: '✅ Pineapple Confessions error logging is active in this private channel.', allowedMentions: { parse: [] } });
           } catch (err) {
-            return interaction.reply({ ephemeral: true, content: `Could not send to that channel: ${err.message}` });
+            return replyInteraction(interaction, { ephemeral: true, content: `Could not send to that channel: ${err.message}` });
           }
           s.errorLogChannelId = channel.id;
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: `Bot errors will be reported in <#${channel.id}> (Server Owner/Admin only).` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Bot errors will be reported in <#${channel.id}> (Server Owner/Admin only).` });
         }
 
         if (sub === 'log-channel') {
           const channel = interaction.options.getChannel('channel', true);
           if (channel.id === s.confessionChannelId || isBotLogDestination(s, channel)) {
-            return interaction.reply({ ephemeral: true, content: 'Choose a dedicated confession log channel, separate from the public channel and bot error log.' });
+            return replyInteraction(interaction, { ephemeral: true, content: 'Choose a dedicated confession log channel, separate from the public channel and bot error log.' });
           }
           const secured = await lockPrivateChannel(channel, interaction.guild, 'the confession log channel');
-          if (!secured.ok) return interaction.reply({ ephemeral: true, content: `Setup stopped: ${secured.note}` });
+          if (!secured.ok) return replyInteraction(interaction, { ephemeral: true, content: `Setup stopped: ${secured.note}` });
           try {
             await channel.send({ content: '✅ Pineapple Confessions and anonymous reply logs are active in this private channel.', allowedMentions: { parse: [] } });
           } catch (err) {
-            return interaction.reply({ ephemeral: true, content: `Could not send to that channel: ${err.message}` });
+            return replyInteraction(interaction, { ephemeral: true, content: `Could not send to that channel: ${err.message}` });
           }
           s.logChannelId = channel.id;
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: `Confession submissions and anonymous reply identities will be logged in <#${channel.id}> (Server Owner/Admin only).` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession submissions and anonymous reply identities will be logged in <#${channel.id}> (Server Owner/Admin only).` });
         }
 
         if (sub === 'setup') {
@@ -817,21 +829,21 @@ client.on(Events.InteractionCreate, async interaction => {
           const verifiedRole = interaction.options.getRole('verified_role', true);
           const reviewChannel = interaction.options.getChannel('review_channel');
           if (verifiedRole.id === interaction.guild.id || verifiedRole.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ ephemeral: true, content: 'Choose a normal Verified role without Administrator permission.' });
+            return replyInteraction(interaction, { ephemeral: true, content: 'Choose a normal Verified role without Administrator permission.' });
           }
           if (confessionChannel.id === logChannel.id || confessionChannel.id === reviewChannel?.id ||
               isBotLogDestination(s, logChannel)) {
-            return interaction.reply({ ephemeral: true, content: 'Choose a dedicated confession log channel, separate from the public channel and bot error log.' });
+            return replyInteraction(interaction, { ephemeral: true, content: 'Choose a dedicated confession log channel, separate from the public channel and bot error log.' });
           }
 
           const logLock = await lockPrivateChannel(logChannel, interaction.guild, 'the confession log channel');
           let reviewLock = null;
           if (reviewChannel && reviewChannel.id !== logChannel.id) reviewLock = await lockPrivateChannel(reviewChannel, interaction.guild, 'the review channel');
           if (!logLock.ok || (reviewLock && !reviewLock.ok)) {
-            return interaction.reply({ ephemeral: true, content: `Setup stopped: ${[logLock.note, reviewLock?.note].filter(Boolean).join(' ')}` });
+            return replyInteraction(interaction, { ephemeral: true, content: `Setup stopped: ${[logLock.note, reviewLock?.note].filter(Boolean).join(' ')}` });
           }
           try { await restrictChannel(confessionChannel, interaction.guild, verifiedRole.id); }
-          catch (err) { return interaction.reply({ ephemeral: true, content: `Could not secure the public channel: ${err.message}` }); }
+          catch (err) { return replyInteraction(interaction, { ephemeral: true, content: `Could not secure the public channel: ${err.message}` }); }
           s.confessionChannelId = confessionChannel.id;
           s.verifiedRoleId = verifiedRole.id;
           s.logChannelId = logChannel.id;
@@ -847,14 +859,14 @@ client.on(Events.InteractionCreate, async interaction => {
 
           const notes = [logLock.note];
           if (reviewLock) notes.push(reviewLock.note);
-          return interaction.reply({
+          return replyInteraction(interaction, {
             ephemeral: true,
             content: `✅ Confession system configured.\n${notes.map(n => `• ${n}`).join('\n')}`,
           });
         }
 
         if (sub === 'settings') {
-          return interaction.reply({
+          return replyInteraction(interaction, {
             ephemeral: true,
             embeds: [
               new EmbedBuilder()
@@ -882,19 +894,19 @@ client.on(Events.InteractionCreate, async interaction => {
           s.memberMessages.formLabel = interaction.options.getString('label', true);
           s.memberMessages.formPlaceholder = interaction.options.getString('placeholder', true);
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: 'The confession form prompt was updated. Use `/confessions message-preview` to see it.' });
+          return replyInteraction(interaction, { ephemeral: true, content: 'The confession form prompt was updated. Use `/confessions message-preview` to see it.' });
         }
 
         if (sub === 'confirmation') {
           const stage = interaction.options.getString('stage', true);
           s.memberMessages[stage] = interaction.options.getString('text', true);
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: `The ${stage} confirmation was updated. The privacy notice is added automatically.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `The ${stage} confirmation was updated. The privacy notice is added automatically.` });
         }
 
         if (sub === 'message-preview') {
           const stage = interaction.options.getString('stage', true);
-          return interaction.reply({
+          return replyInteraction(interaction, {
             ephemeral: true,
             content: `**Form title:** Confession • Anonymous mode enabled you\n**Form label:** ${s.memberMessages.formLabel}\n**Form hint:** ${s.memberMessages.formPlaceholder}\n\n**${stage === 'pending' ? 'Pending approval' : 'Posted'} confirmation:**\n${confirmationText(s, stage, 123)}`,
             allowedMentions: { parse: [] },
@@ -904,31 +916,31 @@ client.on(Events.InteractionCreate, async interaction => {
         if (sub === 'message-reset') {
           s.memberMessages = defaultMemberMessages();
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: 'The form prompt and submission confirmations were reset to their defaults.' });
+          return replyInteraction(interaction, { ephemeral: true, content: 'The form prompt and submission confirmations were reset to their defaults.' });
         }
 
         if (sub === 'approval') {
           s.approvalRequired = interaction.options.getBoolean('enabled', true);
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: `Approval mode is now **${s.approvalRequired ? 'ON' : 'OFF'}**.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Approval mode is now **${s.approvalRequired ? 'ON' : 'OFF'}**.` });
         }
 
         if (sub === 'cooldown') {
           s.cooldownSeconds = interaction.options.getInteger('seconds', true);
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: `Confession cooldown set to **${s.cooldownSeconds} seconds**.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession cooldown set to **${s.cooldownSeconds} seconds**.` });
         }
 
         if (sub === 'attachments') {
           s.allowAttachments = interaction.options.getBoolean('enabled', true);
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: `Attachments are now **${s.allowAttachments ? 'enabled' : 'disabled'}**.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Attachments are now **${s.allowAttachments ? 'enabled' : 'disabled'}**.` });
         }
 
         if (sub === 'replies') {
           s.allowReplies = interaction.options.getBoolean('enabled', true);
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: `Anonymous replies are now **${s.allowReplies ? 'enabled' : 'disabled'}**.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Anonymous replies are now **${s.allowReplies ? 'enabled' : 'disabled'}**.` });
         }
 
         if (sub === 'block' || sub === 'unblock') {
@@ -940,7 +952,7 @@ client.on(Events.InteractionCreate, async interaction => {
           }
           await saveDb();
           await sendLog(interaction.guild, `🔒 Confession ${sub}`, `${interaction.user.tag} ${sub === 'block' ? 'blocked' : 'unblocked'} ${user.tag} (\`${user.id}\`).`);
-          return interaction.reply({ ephemeral: true, content: `${user.tag} is now ${sub === 'block' ? 'blocked from' : 'allowed to use'} confessions.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `${user.tag} is now ${sub === 'block' ? 'blocked from' : 'allowed to use'} confessions.` });
         }
 
         if (sub === 'filter-add' || sub === 'filter-remove') {
@@ -951,12 +963,12 @@ client.on(Events.InteractionCreate, async interaction => {
             s.blockedWords = s.blockedWords.filter(x => x.toLowerCase() !== phrase.toLowerCase());
           }
           await saveDb();
-          return interaction.reply({ ephemeral: true, content: `Filter updated. There are now ${s.blockedWords.length} blocked words/phrases.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Filter updated. There are now ${s.blockedWords.length} blocked words/phrases.` });
         }
 
         const id = interaction.options.getInteger('id', true);
         const record = gd.confessions[String(id)];
-        if (!record) return interaction.reply({ ephemeral: true, content: `Confession #${id} does not exist.` });
+        if (!record) return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} does not exist.` });
 
         if (sub === 'inspect') {
           record.history.push({ action: 'identity_inspected', at: new Date().toISOString(), by: interaction.user.id });
@@ -964,7 +976,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await sendLog(interaction.guild, `👁️ Identity inspected for Confession #${id}`, `<@${interaction.user.id}> inspected the submitter identity.`, [
             { name: 'Submitter', value: `${record.authorTag}\n<@${record.authorId}>\n\`${record.authorId}\`` }
           ]);
-          return interaction.reply({
+          return replyInteraction(interaction, {
             ephemeral: true,
             embeds: [new EmbedBuilder()
               .setColor(0xED4245)
@@ -977,7 +989,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         if (sub === 'approve') {
-          if (record.status !== 'pending') return interaction.reply({ ephemeral: true, content: `Confession #${id} is not pending.` });
+          if (record.status !== 'pending') return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} is not pending.` });
           await postConfession(interaction.guild, gd, record);
           record.reviewedBy = interaction.user.id;
           record.history.push({ action: 'approved', at: new Date().toISOString(), by: interaction.user.id });
@@ -988,11 +1000,11 @@ client.on(Events.InteractionCreate, async interaction => {
             if (reviewMsg) await reviewMsg.edit({ components: [] }).catch(() => {});
           }
           await sendLog(interaction.guild, `✅ Confession #${id} approved`, `Approved by <@${interaction.user.id}>.`);
-          return interaction.reply({ ephemeral: true, content: `Confession #${id} approved and posted.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} approved and posted.` });
         }
 
         if (sub === 'reject') {
-          if (record.status !== 'pending') return interaction.reply({ ephemeral: true, content: `Confession #${id} is not pending.` });
+          if (record.status !== 'pending') return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} is not pending.` });
           const reason = interaction.options.getString('reason') || 'No reason provided';
           record.status = 'rejected';
           record.reviewedBy = interaction.user.id;
@@ -1002,7 +1014,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await sendLog(interaction.guild, `❌ Confession #${id} rejected`, `Rejected by <@${interaction.user.id}>.`, [
             { name: 'Reason', value: reason.slice(0, 1024) }
           ]);
-          return interaction.reply({ ephemeral: true, content: `Confession #${id} rejected.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} rejected.` });
         }
 
         if (sub === 'hide') {
@@ -1012,23 +1024,24 @@ client.on(Events.InteractionCreate, async interaction => {
           record.history.push({ action: 'hidden', at: new Date().toISOString(), by: interaction.user.id });
           await saveDb();
           await sendLog(interaction.guild, `🙈 Confession #${id} hidden`, `Hidden by <@${interaction.user.id}>.`);
-          return interaction.reply({ ephemeral: true, content: `Confession #${id} was hidden. Its audit record is preserved.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} was hidden. Its audit record is preserved.` });
         }
 
         if (sub === 'restore') {
           if (!['hidden', 'deleted_by_author', 'error'].includes(record.status)) {
-            return interaction.reply({ ephemeral: true, content: `Confession #${id} is not in a restorable state.` });
+            return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} is not in a restorable state.` });
           }
           await postConfession(interaction.guild, gd, record);
           record.history.push({ action: 'restored', at: new Date().toISOString(), by: interaction.user.id });
           await saveDb();
           await sendLog(interaction.guild, `♻️ Confession #${id} restored`, `Restored by <@${interaction.user.id}>.`);
-          return interaction.reply({ ephemeral: true, content: `Confession #${id} was reposted.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} was reposted.` });
         }
       }
     }
 
     if (interaction.isModalSubmit()) {
+      await interaction.deferReply({ ephemeral: true });
       if (interaction.customId === 'confess-modal') {
         const text = interaction.fields.getTextInputValue('text');
         return submitConfession(interaction, text);
@@ -1037,13 +1050,13 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId.startsWith('reply-modal:')) {
         const id = Number(interaction.customId.split(':')[1]);
         const gd = getGuildData(interaction.guildId);
-        if (!await isVerified(interaction, gd.settings)) return interaction.reply({ ephemeral: true, content: 'Verified role required.' });
+        if (!await isVerified(interaction, gd.settings)) return replyInteraction(interaction, { ephemeral: true, content: 'Verified role required.' });
         const record = gd.confessions[String(id)];
-        if (!record || record.status !== 'posted') return interaction.reply({ ephemeral: true, content: 'That confession is no longer available.' });
-        if (!gd.settings.allowReplies) return interaction.reply({ ephemeral: true, content: 'Anonymous replies are disabled.' });
+        if (!record || record.status !== 'posted') return replyInteraction(interaction, { ephemeral: true, content: 'That confession is no longer available.' });
+        if (!gd.settings.allowReplies) return replyInteraction(interaction, { ephemeral: true, content: 'Anonymous replies are disabled.' });
         const text = interaction.fields.getTextInputValue('text');
         const bad = blockedWord(gd, text);
-        if (bad) return interaction.reply({ ephemeral: true, content: 'Your reply contains a blocked word or phrase.' });
+        if (bad) return replyInteraction(interaction, { ephemeral: true, content: 'Your reply contains a blocked word or phrase.' });
 
         return submitAnonymousReply(interaction, gd, record, id, text, 'Anonymous reply posted.');
       }
@@ -1051,9 +1064,9 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId.startsWith('report-modal:')) {
         const id = Number(interaction.customId.split(':')[1]);
         const gd = getGuildData(interaction.guildId);
-        if (!await isVerified(interaction, gd.settings)) return interaction.reply({ ephemeral: true, content: 'Verified role required.' });
+        if (!await isVerified(interaction, gd.settings)) return replyInteraction(interaction, { ephemeral: true, content: 'Verified role required.' });
         const record = gd.confessions[String(id)];
-        if (!record) return interaction.reply({ ephemeral: true, content: 'That confession no longer exists.' });
+        if (!record) return replyInteraction(interaction, { ephemeral: true, content: 'That confession no longer exists.' });
         const reason = interaction.fields.getTextInputValue('reason');
         record.reports.push({
           reporterId: interaction.user.id,
@@ -1066,15 +1079,15 @@ client.on(Events.InteractionCreate, async interaction => {
           { name: 'Reason', value: reason.slice(0, 1024) },
           { name: 'Original submitter', value: `<@${record.authorId}> (\`${record.authorId}\`)` },
         ]);
-        return interaction.reply({ ephemeral: true, content: 'Your report was sent privately' });
+        return replyInteraction(interaction, { ephemeral: true, content: 'Your report was sent privately' });
       }
 
       if (interaction.customId.startsWith('reject-modal:')) {
-        if (!isAdmin(interaction)) return interaction.reply({ ephemeral: true, content: 'Administrator permission is required.' });
+        if (!isAdmin(interaction)) return replyInteraction(interaction, { ephemeral: true, content: 'Administrator permission is required.' });
         const id = Number(interaction.customId.split(':')[1]);
         const gd = getGuildData(interaction.guildId);
         const record = gd.confessions[String(id)];
-        if (!record || record.status !== 'pending') return interaction.reply({ ephemeral: true, content: 'That confession is no longer pending.' });
+        if (!record || record.status !== 'pending') return replyInteraction(interaction, { ephemeral: true, content: 'That confession is no longer pending.' });
         const reason = interaction.fields.getTextInputValue('reason');
         record.status = 'rejected';
         record.reviewedBy = interaction.user.id;
@@ -1084,7 +1097,7 @@ client.on(Events.InteractionCreate, async interaction => {
         await sendLog(interaction.guild, `❌ Confession #${id} rejected`, `Rejected by <@${interaction.user.id}>.`, [
           { name: 'Reason', value: reason.slice(0, 1024) }
         ]);
-        return interaction.reply({ ephemeral: true, content: `Confession #${id} rejected.` });
+        return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} rejected.` });
       }
     }
 
@@ -1096,11 +1109,11 @@ client.on(Events.InteractionCreate, async interaction => {
       }
       const id = Number(rawId);
       const record = gd.confessions[String(id)];
-      if (!record) return interaction.reply({ ephemeral: true, content: 'That confession no longer exists.' });
+      if (!record) return replyInteraction(interaction, { ephemeral: true, content: 'That confession no longer exists.' });
 
       if (action === 'reply') {
-        if (!await isVerified(interaction, gd.settings)) return interaction.reply({ ephemeral: true, content: 'Verified role required.' });
-        if (!gd.settings.allowReplies) return interaction.reply({ ephemeral: true, content: 'Anonymous replies are disabled.' });
+        if (!await isVerified(interaction, gd.settings)) return replyInteraction(interaction, { ephemeral: true, content: 'Verified role required.' });
+        if (!gd.settings.allowReplies) return replyInteraction(interaction, { ephemeral: true, content: 'Anonymous replies are disabled.' });
         const modal = new ModalBuilder().setCustomId(`reply-modal:${id}`).setTitle(`Reply to Confession #${id}`);
         const input = new TextInputBuilder()
           .setCustomId('text')
@@ -1114,7 +1127,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       if (action === 'report') {
-        if (!await isVerified(interaction, gd.settings)) return interaction.reply({ ephemeral: true, content: 'Verified role required.' });
+        if (!await isVerified(interaction, gd.settings)) return replyInteraction(interaction, { ephemeral: true, content: 'Verified role required.' });
         const modal = new ModalBuilder().setCustomId(`report-modal:${id}`).setTitle(`Report Confession #${id}`);
         const input = new TextInputBuilder()
           .setCustomId('reason')
@@ -1128,17 +1141,18 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       if (['approve', 'reject', 'inspect'].includes(action)) {
-        if (!isAdmin(interaction)) return interaction.reply({ ephemeral: true, content: 'Server Owner or Administrator permission is required.' });
+        if (!isAdmin(interaction)) return replyInteraction(interaction, { ephemeral: true, content: 'Server Owner or Administrator permission is required.' });
 
         if (action === 'approve') {
-          if (record.status !== 'pending') return interaction.reply({ ephemeral: true, content: 'This confession is no longer pending.' });
+          if (record.status !== 'pending') return replyInteraction(interaction, { ephemeral: true, content: 'This confession is no longer pending.' });
+          await interaction.deferReply({ ephemeral: true });
           await postConfession(interaction.guild, gd, record);
           record.reviewedBy = interaction.user.id;
           record.history.push({ action: 'approved', at: new Date().toISOString(), by: interaction.user.id });
           await saveDb();
           await interaction.message.edit({ components: [] }).catch(() => {});
           await sendLog(interaction.guild, `✅ Confession #${id} approved`, `Approved by <@${interaction.user.id}>.`);
-          return interaction.reply({ ephemeral: true, content: `Confession #${id} approved and posted.` });
+          return replyInteraction(interaction, { ephemeral: true, content: `Confession #${id} approved and posted.` });
         }
 
         if (action === 'reject') {
@@ -1154,10 +1168,11 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         if (action === 'inspect') {
+          await interaction.deferReply({ ephemeral: true });
           record.history.push({ action: 'identity_inspected', at: new Date().toISOString(), by: interaction.user.id });
           await saveDb();
           await sendLog(interaction.guild, `👁️ Identity inspected for Confession #${id}`, `<@${interaction.user.id}> inspected the submitter identity.`);
-          return interaction.reply({
+          return replyInteraction(interaction, {
             ephemeral: true,
             content: `**Confession #${id} submitter:** ${record.authorTag} • <@${record.authorId}> • \`${record.authorId}\`\nThis lookup was audit-logged.`,
           });
@@ -1171,7 +1186,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.deferred || interaction.replied) {
       await interaction.followUp(payload).catch(() => {});
     } else if (interaction.isRepliable()) {
-      await interaction.reply(payload).catch(() => {});
+      await replyInteraction(interaction, payload).catch(() => {});
     }
     void sendErrorLog(interaction.guild, err, interaction.commandName || interaction.customId || 'Interaction', errorId, interaction.user?.id);
   }
